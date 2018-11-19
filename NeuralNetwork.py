@@ -9,8 +9,10 @@ import numpy as np
 
 import math as mh
 import matplotlib.pyplot as plt
+import random
 
-
+LR = []
+ 
 class NeuralNetwork():
 
     def __init__(self, hidden_layer_size, lr, trainset_path):
@@ -123,33 +125,79 @@ class NeuralNetwork():
 
         hidden_layer_trans = self.hidden_layer_tmp.transpose()
 
-        self.delta_hidden_output_weight = self.lr * \
+        self.delta_hidden_output_weight =  \
             np.dot(self.delta_output_layer, hidden_layer_trans)
 
         # delta input to hidden layer weight
 
         input_layer_trans = self.input_layer.transpose()
 
-        self.delta_input_hidden_weight = self.lr * \
+        self.delta_input_hidden_weight =  \
             np.dot(self.delta_hidden_layer, input_layer_trans)
 
-        # update weights
-
-        self.input_hidden_weight += self.delta_input_hidden_weight
-        self.hidden_output_weight += self.delta_hidden_output_weight
-
         return delta_output
+    
+    def update(self,update_strategy,arg=[]):
+        
 
+        if (update_strategy=='SGD'):
+
+            LR .append(self.lr)
+            self.input_hidden_weight += self.lr *self.delta_input_hidden_weight
+            self.hidden_output_weight += self.lr *self.delta_hidden_output_weight
+
+        elif (update_strategy=='SGD-Sigmoid-Annealing'):
+
+            t= arg[0]
+            tmax= arg[1]
+            lr_min= arg[2]
+            lr_max= arg[3]
+            self.lr = lr_min+((lr_max-lr_min)*((1 / (1 + mh.exp(t/tmax)))))
+            LR .append(self.lr)
+            self.input_hidden_weight += self.lr *self.delta_input_hidden_weight
+            self.hidden_output_weight += self.lr *self.delta_hidden_output_weight
+            
+        elif   (update_strategy=='SGD-Momentum'):
+
+            beta= arg[0]
+            
+            if getattr(self, "input_hidden_weight_vt_old", None) is not None:
+
+                self.input_hidden_weight_vt_new = beta * self.input_hidden_weight_vt_old+self.delta_input_hidden_weight
+                self.input_hidden_weight_vt_new = self.lr *self.delta_input_hidden_weight
+                self.input_hidden_weight_vt_old = self.input_hidden_weight_vt_new
+                
+            else:
+                
+                self.input_hidden_weight_vt_new = self.delta_input_hidden_weight
+                self.input_hidden_weight_vt_new = self.lr *self.delta_input_hidden_weight
+                self.input_hidden_weight_vt_old = self.input_hidden_weight_vt_new
+
+            if getattr(self, "hidden_output_weight_vt_old", None) is not None:
+
+                self.hidden_output_weight_vt_new =  beta * self.hidden_output_weight_vt_old+self.delta_hidden_output_weight
+                self.hidden_output_weight_vt_new = self.delta_hidden_output_weight
+                self.hidden_output_weight_vt_old = self.hidden_output_weight_vt_new
+                
+            else:
+                
+               self.hidden_output_weight_vt_new =  self.delta_hidden_output_weight
+               self.hidden_output_weight_vt_new = self.delta_hidden_output_weight
+               self.hidden_output_weight_vt_old = self.hidden_output_weight_vt_new
+
+            LR .append(self.lr)
+            self.input_hidden_weight += self.lr *self.input_hidden_weight_vt_new
+            self.hidden_output_weight += self.lr *self.hidden_output_weight_vt_new  
+             
 # define the neural network
 
+learning_rate =  1.5
 
-learning_rate = 0.7
-
-hidden_layer_neural_numbers = 3
+hidden_layer_neural_numbers = 6
 
 # define the training times
 
-epochMax = 10000
+epochMax = 500
 
 lossMin = 0.001
 
@@ -163,6 +211,10 @@ trainset_path = 'Iris-setosa.csv'
 
 # new a neural network
 
+# define the training strategy
+
+update_strategy = 'SGD-Momentum'
+
 MLP = NeuralNetwork(hidden_layer_neural_numbers, learning_rate, trainset_path)
 
 # do training , count mse
@@ -172,13 +224,25 @@ MSES = []
 for epoch in range(epochMax):
 
     error_square_sum = 0
+    
+    # creat traing seqense
 
+    traing_seqense= np.arange(len(MLP.dataset))
+
+    # randomlize seqense
+
+    random.shuffle(traing_seqense)
+    
     for x in range(len(MLP.dataset)):
-
-        MLP.forward(MLP.dataset[x, :trainset_col - 1])
-        error = MLP.backward(MLP.dataset[x, trainset_col - 1:trainset_col])
+        
+        MLP.forward(MLP.dataset[traing_seqense[x], :trainset_col - 1])
+        error = MLP.backward(MLP.dataset[traing_seqense[x], trainset_col - 1:trainset_col])
         error_square_sum += np.square(error)
-
+        #arg = np.array([(epoch-1)*len(MLP.dataset)+x,epochMax,0.75,1.5,0.7])
+        arg = np.array([0.7])
+        MLP.update(update_strategy,arg)
+        #MLP.update(update_strategy)
+        
     MSE = error_square_sum / len(MLP.dataset)
 
     print('Epoch ' + str(epoch) + ' loss : ' + str(MSE))
@@ -190,6 +254,9 @@ for epoch in range(epochMax):
         break
 
 plt.plot(MSES)
+plt.show()
+
+plt.plot(LR)
 plt.show()
 
 # testing the neural netwok by user input
